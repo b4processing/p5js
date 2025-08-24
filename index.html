@@ -160,27 +160,6 @@
             background: linear-gradient(135deg, #434343 0%, #000000 100%);
         }
 
-        .input-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .input-group label {
-            font-size: 14px;
-            color: #e0e0e0;
-        }
-
-        .input-group input {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
-            padding: 6px 10px;
-            color: #e0e0e0;
-            font-family: inherit;
-            width: 60px;
-        }
-
         .preview-panel {
             display: flex;
             flex-direction: column;
@@ -238,6 +217,15 @@
             opacity: 0.7;
         }
 
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #4ecdc4;
+            font-size: 18px;
+        }
+
         .status-message {
             position: fixed;
             top: 20px;
@@ -261,15 +249,6 @@
 
         .status-message.error {
             background: linear-gradient(135deg, #ff5f6d 0%, #ffc371 100%);
-        }
-
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #4ecdc4;
-            font-size: 18px;
         }
 
         @media (max-width: 1024px) {
@@ -313,14 +292,8 @@
             <div class="controls">
                 <button class="btn success" onclick="runCode()">▶️ Run</button>
                 <button class="btn danger" onclick="stopCode()">⏹️ Stop</button>
-                <button class="btn secondary" onclick="beautifyCode()">✨ Format</button>
                 <button class="btn secondary" onclick="resetCode()">🔄 Reset</button>
-                <div class="input-group">
-                    <label for="gifLength">GIF Length:</label>
-                    <input type="number" id="gifLength" min="1" max="60" value="15">
-                    <span>sec</span>
-                </div>
-                <button class="btn" onclick="recordGif()">🎥 Record GIF</button>
+                <button class="btn" onclick="tweetCode()">🐦 Tweet</button>
             </div>
         </div>
 
@@ -341,7 +314,6 @@
                 <textarea class="output-textarea" id="minifiedOutput" readonly placeholder="Minified code will appear here..."></textarea>
                 <div class="char-count">
                     <span class="count" id="charCount">0</span><span class="limit">/280</span>
-                    <button class="btn" onclick="tweetCode()" style="margin-left: 15px;">🐦 Tweet</button>
                 </div>
             </div>
         </div>
@@ -349,14 +321,15 @@
 
     <div class="status-message" id="statusMessage"></div>
 
-    <!-- Scripts -->
+    <!-- Load p5.js first -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    
+    <!-- Then CodeMirror -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/terser/5.19.2/terser.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 
     <script>
+        // Default working code
         const defaultCode = `function setup() {
   createCanvas(400, 400);
   background(20);
@@ -366,7 +339,6 @@ function draw() {
   fill(255, 100);
   noStroke();
   
-  // Create flowing particles
   let time = millis() * 0.001;
   
   for (let i = 0; i < 50; i++) {
@@ -380,336 +352,269 @@ function draw() {
 
         let editor;
         let currentSketch;
-        let isRecording = false;
-
-        // Initialize CodeMirror
-        function initEditor() {
-            try {
-                const savedCode = localStorage.getItem('tweetcode') || defaultCode;
-                
-                editor = CodeMirror(document.getElementById('codeEditor'), {
-                    value: savedCode,
-                    mode: 'javascript',
-                    theme: 'monokai',
-                    lineNumbers: true,
-                    autoCloseBrackets: true,
-                    matchBrackets: true,
-                    indentUnit: 2,
-                    lineWrapping: true,
-                    fontSize: '14px'
-                });
-
-                editor.on('change', () => {
-                    try {
-                        localStorage.setItem('tweetcode', editor.getValue());
-                    } catch(e) {
-                        console.warn('Could not save to localStorage:', e);
-                    }
-                });
-                
-                console.log('Editor initialized successfully');
-            } catch(error) {
-                console.error('Error initializing editor:', error);
-                showStatus('Error initializing code editor', 'error');
-            }
-        }
 
         // Show status message
         function showStatus(message, type = 'success') {
-            try {
-                const statusEl = document.getElementById('statusMessage');
-                statusEl.textContent = message;
-                statusEl.className = `status-message ${type} show`;
-                setTimeout(() => {
-                    statusEl.classList.remove('show');
-                }, 3000);
-            } catch(error) {
-                console.error('Error showing status:', error);
-            }
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type} show`;
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, 3000);
         }
 
-        // Run the p5.js code
+        // Initialize CodeMirror editor
+        function initEditor() {
+            const editorContainer = document.getElementById('codeEditor');
+            
+            editor = CodeMirror(editorContainer, {
+                value: defaultCode,
+                mode: 'javascript',
+                theme: 'monokai',
+                lineNumbers: true,
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                indentUnit: 2,
+                lineWrapping: true
+            });
+
+            console.log('Editor initialized');
+            showStatus('Editor ready!');
+        }
+
+        // Run p5.js code
         function runCode() {
+            console.log('Running code...');
+            
             try {
-                stopCode(); // Stop any existing sketch
+                // Stop any existing sketch
+                stopCode();
                 
                 const code = editor.getValue();
-                console.log('Running code:', code);
+                console.log('Code to run:', code);
                 
-                // Save code to localStorage
-                try {
-                    localStorage.setItem('tweetcode', code);
-                } catch(e) {
-                    console.warn('Could not save to localStorage:', e);
-                }
+                // Clear the container
+                const container = document.getElementById('canvasContainer');
+                container.innerHTML = '';
                 
-                // Create a safer evaluation environment
+                // Create new p5 sketch
                 const sketch = (p) => {
-                    // Bind p5.js functions to the p instance
+                    // Store original functions to restore later
+                    const originalFunctions = {};
+                    
+                    // List of p5.js functions to bind
                     const p5Functions = [
-                        'createCanvas', 'background', 'fill', 'noStroke', 'stroke', 'strokeWeight',
-                        'rect', 'circle', 'ellipse', 'line', 'point', 'triangle',
-                        'cos', 'sin', 'tan', 'random', 'noise', 'map', 'constrain',
-                        'millis', 'frameCount', 'width', 'height', 'mouseX', 'mouseY',
-                        'push', 'pop', 'translate', 'rotate', 'scale'
+                        'createCanvas', 'background', 'fill', 'stroke', 'strokeWeight', 'noStroke', 'noFill',
+                        'rect', 'circle', 'ellipse', 'line', 'point', 'triangle', 'quad',
+                        'cos', 'sin', 'tan', 'atan2', 'random', 'noise', 'map', 'constrain', 'lerp',
+                        'abs', 'max', 'min', 'sqrt', 'pow', 'floor', 'ceil', 'round',
+                        'push', 'pop', 'translate', 'rotate', 'scale',
+                        'color', 'red', 'green', 'blue', 'alpha'
                     ];
                     
-                    // Create a context with p5.js functions
-                    const context = {
-                        // Core p5.js functions
-                        createCanvas: (...args) => p.createCanvas(...args),
-                        background: (...args) => p.background(...args),
-                        fill: (...args) => p.fill(...args),
-                        noStroke: () => p.noStroke(),
-                        stroke: (...args) => p.stroke(...args),
-                        strokeWeight: (...args) => p.strokeWeight(...args),
-                        rect: (...args) => p.rect(...args),
-                        circle: (...args) => p.circle(...args),
-                        ellipse: (...args) => p.ellipse(...args),
-                        line: (...args) => p.line(...args),
-                        point: (...args) => p.point(...args),
-                        triangle: (...args) => p.triangle(...args),
+                    // Bind functions to window
+                    p5Functions.forEach(funcName => {
+                        if (window[funcName]) {
+                            originalFunctions[funcName] = window[funcName];
+                        }
+                        window[funcName] = (...args) => p[funcName](...args);
+                    });
+                    
+                    // Handle system variables that might already exist
+                    const systemVars = ['width', 'height', 'mouseX', 'mouseY', 'pmouseX', 'pmouseY', 
+                                       'mouseIsPressed', 'key', 'keyIsPressed', 'frameCount'];
+                    
+                    systemVars.forEach(varName => {
+                        try {
+                            if (window.hasOwnProperty(varName)) {
+                                originalFunctions[varName] = window[varName];
+                            }
+                            Object.defineProperty(window, varName, {
+                                get: () => p[varName],
+                                configurable: true
+                            });
+                        } catch (e) {
+                            // If we can't redefine, just skip it
+                            console.warn(`Could not bind ${varName}:`, e.message);
+                        }
+                    });
+                    
+                    // Special handling for millis since it might conflict
+                    try {
+                        if (window.hasOwnProperty('millis')) {
+                            originalFunctions.millis = window.millis;
+                        }
+                        Object.defineProperty(window, 'millis', {
+                            get: () => p.millis(),
+                            configurable: true
+                        });
+                    } catch (e) {
+                        // Fallback: create a different name
+                        console.warn('Could not bind millis, using getMillis instead');
+                        window.getMillis = () => p.millis();
+                    }
+                    
+                    // Execute the user code
+                    try {
+                        eval(code);
                         
-                        // Math functions
-                        cos: (...args) => p.cos(...args),
-                        sin: (...args) => p.sin(...args),
-                        tan: (...args) => p.tan(...args),
-                        random: (...args) => p.random(...args),
-                        noise: (...args) => p.noise(...args),
-                        map: (...args) => p.map(...args),
-                        constrain: (...args) => p.constrain(...args),
+                        // Set up the p5.js lifecycle functions
+                        p.setup = typeof window.setup === 'function' ? window.setup : () => {};
+                        p.draw = typeof window.draw === 'function' ? window.draw : () => {};
                         
-                        // Transform functions
-                        push: () => p.push(),
-                        pop: () => p.pop(),
-                        translate: (...args) => p.translate(...args),
-                        rotate: (...args) => p.rotate(...args),
-                        scale: (...args) => p.scale(...args),
+                        // Optional event handlers
+                        if (typeof window.mousePressed === 'function') p.mousePressed = window.mousePressed;
+                        if (typeof window.mouseReleased === 'function') p.mouseReleased = window.mouseReleased;
+                        if (typeof window.keyPressed === 'function') p.keyPressed = window.keyPressed;
+                        if (typeof window.keyReleased === 'function') p.keyReleased = window.keyReleased;
                         
-                        // Time and interaction
-                        get millis() { return p.millis(); },
-                        get frameCount() { return p.frameCount; },
-                        get width() { return p.width; },
-                        get height() { return p.height; },
-                        get mouseX() { return p.mouseX; },
-                        get mouseY() { return p.mouseY; },
+                    } catch (e) {
+                        console.error('Code execution error:', e);
+                        throw new Error('Code error: ' + e.message);
+                    }
+                    
+                    // Cleanup function (restore original functions)
+                    const cleanup = () => {
+                        p5Functions.forEach(funcName => {
+                            if (originalFunctions[funcName]) {
+                                window[funcName] = originalFunctions[funcName];
+                            } else {
+                                delete window[funcName];
+                            }
+                        });
                         
-                        // Default setup and draw
-                        setup: () => {},
-                        draw: () => {}
+                        systemVars.forEach(varName => {
+                            try {
+                                if (originalFunctions[varName]) {
+                                    Object.defineProperty(window, varName, {
+                                        value: originalFunctions[varName],
+                                        configurable: true,
+                                        writable: true
+                                    });
+                                } else {
+                                    delete window[varName];
+                                }
+                            } catch (e) {
+                                // Ignore cleanup errors
+                            }
+                        });
                     };
                     
-                    // Execute user code with context
-                    try {
-                        const func = new Function(...Object.keys(context), code);
-                        func.apply(null, Object.values(context));
-                        
-                        // Set up p5.js lifecycle
-                        p.setup = context.setup;
-                        p.draw = context.draw;
-                    } catch (e) {
-                        throw new Error(`Code execution error: ${e.message}`);
-                    }
+                    // Store cleanup function for later use
+                    window._p5Cleanup = cleanup;
                 };
                 
-                // Create the p5.js instance
-                currentSketch = new p5(sketch, 'canvasContainer');
+                currentSketch = new p5(sketch, container);
                 
-                // Minify and display code
-                minifyAndDisplay(code);
+                // Generate minified output
+                generateMinifiedOutput(code);
                 
-                showStatus('Sketch started successfully!');
+                showStatus('Sketch running!');
+                
             } catch (error) {
-                console.error('Error running code:', error);
+                console.error('Run error:', error);
                 showStatus('Error: ' + error.message, 'error');
             }
         }
 
-        // Stop the current sketch
+        // Stop current sketch
         function stopCode() {
             if (currentSketch) {
-                try {
-                    currentSketch.remove();
-                    currentSketch = null;
-                    console.log('Sketch stopped');
-                } catch(error) {
-                    console.error('Error stopping sketch:', error);
-                }
+                currentSketch.remove();
+                currentSketch = null;
+                console.log('Sketch stopped');
             }
             
-            // Clear canvas container
             const container = document.getElementById('canvasContainer');
-            container.innerHTML = '';
-            
-            // Add loading message
-            const loading = document.createElement('div');
-            loading.className = 'loading';
-            loading.textContent = 'Ready to run your sketch...';
-            container.appendChild(loading);
+            container.innerHTML = '<div class="loading">Ready to run your sketch...</div>';
         }
 
-        // Minify code and display
-        async function minifyAndDisplay(code) {
-            try {
-                // Check if Terser is available
-                if (typeof Terser === 'undefined') {
-                    console.warn('Terser not available, using original code');
-                    const minifiedCode = code + " //#つぶやきProcessing";
-                    displayMinifiedCode(minifiedCode);
-                    return;
-                }
-                
-                const result = await Terser.minify(code, {
-                    mangle: true,
-                    compress: {
-                        drop_console: true,
-                        drop_debugger: true
-                    }
-                });
-                
-                const minifiedCode = result.code + " //#つぶやきProcessing";
-                displayMinifiedCode(minifiedCode);
-                
-            } catch (error) {
-                console.error('Minification error:', error);
-                // Fallback to original code if minification fails
-                const fallbackCode = code + " //#つぶやきProcessing";
-                displayMinifiedCode(fallbackCode);
-                showStatus('Using unminified code (minification failed)', 'error');
-            }
-        }
-        
-        function displayMinifiedCode(minifiedCode) {
-            const outputEl = document.getElementById('minifiedOutput');
-            const charCountEl = document.getElementById('charCount');
+        // Generate minified output for Twitter
+        function generateMinifiedOutput(code) {
+            // Simple but effective minification
+            let minified = code
+                // Remove comments
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .replace(/\/\/.*$/gm, '')
+                // Remove extra whitespace
+                .replace(/\s+/g, ' ')
+                // Clean up around braces and operators
+                .replace(/\s*([{}();,=])\s*/g, '$1')
+                .replace(/\s*\{\s*/g, '{')
+                .replace(/\s*\}\s*/g, '}')
+                .trim();
             
-            outputEl.value = minifiedCode;
+            // Add hashtag and ensure single line
+            minified = minified + ' //#つぶやきProcessing';
             
-            // Calculate character count (handle UTF-8)
-            const encoder = new TextEncoder();
-            const byteLength = encoder.encode(minifiedCode).length;
-            const charLength = minifiedCode.length;
-            const displayCount = charLength + (byteLength - charLength) / 2;
+            // Display in textarea
+            const output = document.getElementById('minifiedOutput');
+            output.value = minified;
             
-            charCountEl.textContent = Math.ceil(displayCount);
+            // Update character count
+            const charCount = document.getElementById('charCount');
+            const count = minified.length;
+            charCount.textContent = count;
             
             // Color code the count
-            if (displayCount > 280) {
-                charCountEl.style.color = '#ff5f6d';
-            } else if (displayCount > 250) {
-                charCountEl.style.color = '#ffc371';
+            if (count > 280) {
+                charCount.style.color = '#ff5f6d';
+            } else if (count > 250) {
+                charCount.style.color = '#ffc371';
             } else {
-                charCountEl.style.color = '#4ecdc4';
-            }
-        }
-
-        // Beautify code
-        function beautifyCode() {
-            try {
-                if (typeof js_beautify === 'undefined') {
-                    showStatus('Code beautifier not available', 'error');
-                    return;
-                }
-                
-                const code = editor.getValue();
-                const beautified = js_beautify(code, {
-                    indent_size: 2,
-                    space_in_empty_paren: true,
-                    preserve_newlines: true,
-                    indent_with_tabs: false
-                });
-                
-                editor.setValue(beautified);
-                showStatus('Code formatted successfully!');
-            } catch (error) {
-                console.error('Beautification error:', error);
-                showStatus('Error formatting code: ' + error.message, 'error');
+                charCount.style.color = '#4ecdc4';
             }
         }
 
         // Reset to default code
         function resetCode() {
-            if (confirm('Reset to default code? This will lose your current work.')) {
+            if (confirm('Reset to default code?')) {
                 editor.setValue(defaultCode);
-                try {
-                    localStorage.removeItem('tweetcode');
-                } catch(e) {
-                    console.warn('Could not clear localStorage:', e);
-                }
-                showStatus('Code reset to default');
+                showStatus('Reset to default code');
             }
-        }
-
-        // Record GIF (simplified version)
-        function recordGif() {
-            if (!currentSketch) {
-                showStatus('Please run your sketch first!', 'error');
-                return;
-            }
-            
-            if (isRecording) {
-                showStatus('Already recording! Please wait...', 'error');
-                return;
-            }
-            
-            isRecording = true;
-            const duration = parseInt(document.getElementById('gifLength').value) || 15;
-            
-            showStatus(`Recording GIF for ${duration} seconds...`);
-            
-            // Simple recording simulation (in a real implementation, you'd use CCapture.js)
-            setTimeout(() => {
-                isRecording = false;
-                showStatus('GIF recording complete! (Feature in development)');
-            }, duration * 1000);
         }
 
         // Tweet the code
         function tweetCode() {
             const code = document.getElementById('minifiedOutput').value;
-            if (!code) {
-                showStatus('No code to tweet! Run your sketch first.', 'error');
+            if (!code || code === 'Minified code will appear here...') {
+                showStatus('Run your code first!', 'error');
                 return;
             }
             
             const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(code)}`;
             window.open(tweetUrl, '_blank');
+            showStatus('Opening Twitter...');
         }
 
-        // Initialize everything when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM loaded, initializing...');
+        // Wait for everything to load then initialize
+        window.addEventListener('load', () => {
+            console.log('Page loaded');
             
-            // Add a small delay to ensure all scripts are loaded
+            // Check if required libraries are loaded
+            if (typeof CodeMirror === 'undefined') {
+                showStatus('CodeMirror failed to load', 'error');
+                return;
+            }
+            
+            if (typeof p5 === 'undefined') {
+                showStatus('p5.js failed to load', 'error');
+                return;
+            }
+            
+            // Initialize editor
             setTimeout(() => {
                 initEditor();
                 
-                // Auto-run code if it exists and is different from default
-                try {
-                    const savedCode = localStorage.getItem('tweetcode');
-                    if (savedCode && savedCode !== defaultCode && savedCode.trim() !== '') {
-                        setTimeout(runCode, 500);
-                    }
-                } catch(e) {
-                    console.warn('Could not load from localStorage:', e);
-                }
+                // Auto-run the default sketch
+                setTimeout(() => {
+                    runCode();
+                }, 500);
             }, 100);
         });
 
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            if (editor) {
-                setTimeout(() => {
-                    editor.refresh();
-                }, 100);
-            }
-        });
-
-        // Error handling for unhandled errors
-        window.addEventListener('error', (event) => {
-            console.error('Global error:', event.error);
-            showStatus('An error occurred: ' + event.error.message, 'error');
-        });
+        // Debug info
+        console.log('Script loaded');
     </script>
 </body>
 </html>
