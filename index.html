@@ -357,12 +357,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 
     <script>
-        const defaultCode = `setup = () => {
+        const defaultCode = `function setup() {
   createCanvas(400, 400);
   background(20);
 }
 
-draw = () => {
+function draw() {
   fill(255, 100);
   noStroke();
   
@@ -384,33 +384,48 @@ draw = () => {
 
         // Initialize CodeMirror
         function initEditor() {
-            const savedCode = localStorage.getItem('tweetcode') || defaultCode;
-            
-            editor = CodeMirror(document.getElementById('codeEditor'), {
-                value: savedCode,
-                mode: 'javascript',
-                theme: 'monokai',
-                lineNumbers: true,
-                autoCloseBrackets: true,
-                matchBrackets: true,
-                indentUnit: 2,
-                lineWrapping: true,
-                fontSize: '14px'
-            });
+            try {
+                const savedCode = localStorage.getItem('tweetcode') || defaultCode;
+                
+                editor = CodeMirror(document.getElementById('codeEditor'), {
+                    value: savedCode,
+                    mode: 'javascript',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    autoCloseBrackets: true,
+                    matchBrackets: true,
+                    indentUnit: 2,
+                    lineWrapping: true,
+                    fontSize: '14px'
+                });
 
-            editor.on('change', () => {
-                localStorage.setItem('tweetcode', editor.getValue());
-            });
+                editor.on('change', () => {
+                    try {
+                        localStorage.setItem('tweetcode', editor.getValue());
+                    } catch(e) {
+                        console.warn('Could not save to localStorage:', e);
+                    }
+                });
+                
+                console.log('Editor initialized successfully');
+            } catch(error) {
+                console.error('Error initializing editor:', error);
+                showStatus('Error initializing code editor', 'error');
+            }
         }
 
         // Show status message
         function showStatus(message, type = 'success') {
-            const statusEl = document.getElementById('statusMessage');
-            statusEl.textContent = message;
-            statusEl.className = `status-message ${type} show`;
-            setTimeout(() => {
-                statusEl.classList.remove('show');
-            }, 3000);
+            try {
+                const statusEl = document.getElementById('statusMessage');
+                statusEl.textContent = message;
+                statusEl.className = `status-message ${type} show`;
+                setTimeout(() => {
+                    statusEl.classList.remove('show');
+                }, 3000);
+            } catch(error) {
+                console.error('Error showing status:', error);
+            }
         }
 
         // Run the p5.js code
@@ -419,21 +434,85 @@ draw = () => {
                 stopCode(); // Stop any existing sketch
                 
                 const code = editor.getValue();
-                localStorage.setItem('tweetcode', code);
+                console.log('Running code:', code);
                 
-                // Create a p5.js sketch
+                // Save code to localStorage
+                try {
+                    localStorage.setItem('tweetcode', code);
+                } catch(e) {
+                    console.warn('Could not save to localStorage:', e);
+                }
+                
+                // Create a safer evaluation environment
                 const sketch = (p) => {
-                    // Define p5.js globals in the sketch scope
-                    p.setup = () => {};
-                    p.draw = () => {};
-                    // Execute user code in p5 context
+                    // Bind p5.js functions to the p instance
+                    const p5Functions = [
+                        'createCanvas', 'background', 'fill', 'noStroke', 'stroke', 'strokeWeight',
+                        'rect', 'circle', 'ellipse', 'line', 'point', 'triangle',
+                        'cos', 'sin', 'tan', 'random', 'noise', 'map', 'constrain',
+                        'millis', 'frameCount', 'width', 'height', 'mouseX', 'mouseY',
+                        'push', 'pop', 'translate', 'rotate', 'scale'
+                    ];
+                    
+                    // Create a context with p5.js functions
+                    const context = {
+                        // Core p5.js functions
+                        createCanvas: (...args) => p.createCanvas(...args),
+                        background: (...args) => p.background(...args),
+                        fill: (...args) => p.fill(...args),
+                        noStroke: () => p.noStroke(),
+                        stroke: (...args) => p.stroke(...args),
+                        strokeWeight: (...args) => p.strokeWeight(...args),
+                        rect: (...args) => p.rect(...args),
+                        circle: (...args) => p.circle(...args),
+                        ellipse: (...args) => p.ellipse(...args),
+                        line: (...args) => p.line(...args),
+                        point: (...args) => p.point(...args),
+                        triangle: (...args) => p.triangle(...args),
+                        
+                        // Math functions
+                        cos: (...args) => p.cos(...args),
+                        sin: (...args) => p.sin(...args),
+                        tan: (...args) => p.tan(...args),
+                        random: (...args) => p.random(...args),
+                        noise: (...args) => p.noise(...args),
+                        map: (...args) => p.map(...args),
+                        constrain: (...args) => p.constrain(...args),
+                        
+                        // Transform functions
+                        push: () => p.push(),
+                        pop: () => p.pop(),
+                        translate: (...args) => p.translate(...args),
+                        rotate: (...args) => p.rotate(...args),
+                        scale: (...args) => p.scale(...args),
+                        
+                        // Time and interaction
+                        get millis() { return p.millis(); },
+                        get frameCount() { return p.frameCount; },
+                        get width() { return p.width; },
+                        get height() { return p.height; },
+                        get mouseX() { return p.mouseX; },
+                        get mouseY() { return p.mouseY; },
+                        
+                        // Default setup and draw
+                        setup: () => {},
+                        draw: () => {}
+                    };
+                    
+                    // Execute user code with context
                     try {
-                        eval.call(p, code);
+                        const func = new Function(...Object.keys(context), code);
+                        func.apply(null, Object.values(context));
+                        
+                        // Set up p5.js lifecycle
+                        p.setup = context.setup;
+                        p.draw = context.draw;
                     } catch (e) {
                         throw new Error(`Code execution error: ${e.message}`);
                     }
                 };
                 
+                // Create the p5.js instance
                 currentSketch = new p5(sketch, 'canvasContainer');
                 
                 // Minify and display code
@@ -449,8 +528,13 @@ draw = () => {
         // Stop the current sketch
         function stopCode() {
             if (currentSketch) {
-                currentSketch.remove();
-                currentSketch = null;
+                try {
+                    currentSketch.remove();
+                    currentSketch = null;
+                    console.log('Sketch stopped');
+                } catch(error) {
+                    console.error('Error stopping sketch:', error);
+                }
             }
             
             // Clear canvas container
@@ -467,6 +551,14 @@ draw = () => {
         // Minify code and display
         async function minifyAndDisplay(code) {
             try {
+                // Check if Terser is available
+                if (typeof Terser === 'undefined') {
+                    console.warn('Terser not available, using original code');
+                    const minifiedCode = code + " //#つぶやきProcessing";
+                    displayMinifiedCode(minifiedCode);
+                    return;
+                }
+                
                 const result = await Terser.minify(code, {
                     mangle: true,
                     compress: {
@@ -476,37 +568,49 @@ draw = () => {
                 });
                 
                 const minifiedCode = result.code + " //#つぶやきProcessing";
-                const outputEl = document.getElementById('minifiedOutput');
-                const charCountEl = document.getElementById('charCount');
-                
-                outputEl.value = minifiedCode;
-                
-                // Calculate character count (handle UTF-8)
-                const encoder = new TextEncoder();
-                const byteLength = encoder.encode(minifiedCode).length;
-                const charLength = minifiedCode.length;
-                const displayCount = charLength + (byteLength - charLength) / 2;
-                
-                charCountEl.textContent = Math.ceil(displayCount);
-                
-                // Color code the count
-                if (displayCount > 280) {
-                    charCountEl.style.color = '#ff5f6d';
-                } else if (displayCount > 250) {
-                    charCountEl.style.color = '#ffc371';
-                } else {
-                    charCountEl.style.color = '#4ecdc4';
-                }
+                displayMinifiedCode(minifiedCode);
                 
             } catch (error) {
                 console.error('Minification error:', error);
-                showStatus('Error minifying code: ' + error.message, 'error');
+                // Fallback to original code if minification fails
+                const fallbackCode = code + " //#つぶやきProcessing";
+                displayMinifiedCode(fallbackCode);
+                showStatus('Using unminified code (minification failed)', 'error');
+            }
+        }
+        
+        function displayMinifiedCode(minifiedCode) {
+            const outputEl = document.getElementById('minifiedOutput');
+            const charCountEl = document.getElementById('charCount');
+            
+            outputEl.value = minifiedCode;
+            
+            // Calculate character count (handle UTF-8)
+            const encoder = new TextEncoder();
+            const byteLength = encoder.encode(minifiedCode).length;
+            const charLength = minifiedCode.length;
+            const displayCount = charLength + (byteLength - charLength) / 2;
+            
+            charCountEl.textContent = Math.ceil(displayCount);
+            
+            // Color code the count
+            if (displayCount > 280) {
+                charCountEl.style.color = '#ff5f6d';
+            } else if (displayCount > 250) {
+                charCountEl.style.color = '#ffc371';
+            } else {
+                charCountEl.style.color = '#4ecdc4';
             }
         }
 
         // Beautify code
         function beautifyCode() {
             try {
+                if (typeof js_beautify === 'undefined') {
+                    showStatus('Code beautifier not available', 'error');
+                    return;
+                }
+                
                 const code = editor.getValue();
                 const beautified = js_beautify(code, {
                     indent_size: 2,
@@ -518,6 +622,7 @@ draw = () => {
                 editor.setValue(beautified);
                 showStatus('Code formatted successfully!');
             } catch (error) {
+                console.error('Beautification error:', error);
                 showStatus('Error formatting code: ' + error.message, 'error');
             }
         }
@@ -526,7 +631,11 @@ draw = () => {
         function resetCode() {
             if (confirm('Reset to default code? This will lose your current work.')) {
                 editor.setValue(defaultCode);
-                localStorage.removeItem('tweetcode');
+                try {
+                    localStorage.removeItem('tweetcode');
+                } catch(e) {
+                    console.warn('Could not clear localStorage:', e);
+                }
                 showStatus('Code reset to default');
             }
         }
@@ -569,19 +678,37 @@ draw = () => {
 
         // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            initEditor();
-            // Auto-run code if it exists
-            const savedCode = localStorage.getItem('tweetcode');
-            if (savedCode && savedCode !== defaultCode) {
-                setTimeout(runCode, 1000);
-            }
+            console.log('DOM loaded, initializing...');
+            
+            // Add a small delay to ensure all scripts are loaded
+            setTimeout(() => {
+                initEditor();
+                
+                // Auto-run code if it exists and is different from default
+                try {
+                    const savedCode = localStorage.getItem('tweetcode');
+                    if (savedCode && savedCode !== defaultCode && savedCode.trim() !== '') {
+                        setTimeout(runCode, 500);
+                    }
+                } catch(e) {
+                    console.warn('Could not load from localStorage:', e);
+                }
+            }, 100);
         });
 
         // Handle window resize
         window.addEventListener('resize', () => {
             if (editor) {
-                editor.refresh();
+                setTimeout(() => {
+                    editor.refresh();
+                }, 100);
             }
+        });
+
+        // Error handling for unhandled errors
+        window.addEventListener('error', (event) => {
+            console.error('Global error:', event.error);
+            showStatus('An error occurred: ' + event.error.message, 'error');
         });
     </script>
 </body>
