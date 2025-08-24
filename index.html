@@ -311,26 +311,16 @@
             </div>
             <div class="code-editor" id="codeEditor"></div>
             <div class="controls">
-                <button class="btn success" onclick="runCode()">
-                    ▶️ Run
-                </button>
-                <button class="btn danger" onclick="stopCode()">
-                    ⏹️ Stop
-                </button>
-                <button class="btn secondary" onclick="beautifyCode()">
-                    ✨ Format
-                </button>
-                <button class="btn secondary" onclick="resetCode()">
-                    🔄 Reset
-                </button>
+                <button class="btn success" onclick="runCode()">▶️ Run</button>
+                <button class="btn danger" onclick="stopCode()">⏹️ Stop</button>
+                <button class="btn secondary" onclick="beautifyCode()">✨ Format</button>
+                <button class="btn secondary" onclick="resetCode()">🔄 Reset</button>
                 <div class="input-group">
                     <label for="gifLength">GIF Length:</label>
                     <input type="number" id="gifLength" min="1" max="60" value="15">
                     <span>sec</span>
                 </div>
-                <button class="btn" onclick="recordGif()">
-                    🎥 Record GIF
-                </button>
+                <button class="btn" onclick="recordGif()">🎥 Record GIF</button>
             </div>
         </div>
 
@@ -363,7 +353,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/terser/5.19.2/bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/terser/5.19.2/terser.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 
     <script>
@@ -418,7 +408,6 @@ draw = () => {
             const statusEl = document.getElementById('statusMessage');
             statusEl.textContent = message;
             statusEl.className = `status-message ${type} show`;
-            
             setTimeout(() => {
                 statusEl.classList.remove('show');
             }, 3000);
@@ -432,20 +421,25 @@ draw = () => {
                 const code = editor.getValue();
                 localStorage.setItem('tweetcode', code);
                 
-                // Create new p5 instance with the code
-                const sketchFunction = new Function('p', `
-                    with(p) {
-                        ${code}
+                // Create a p5.js sketch
+                const sketch = (p) => {
+                    // Define p5.js globals in the sketch scope
+                    p.setup = () => {};
+                    p.draw = () => {};
+                    // Execute user code in p5 context
+                    try {
+                        eval.call(p, code);
+                    } catch (e) {
+                        throw new Error(`Code execution error: ${e.message}`);
                     }
-                `);
+                };
                 
-                currentSketch = new p5(sketchFunction, 'canvasContainer');
+                currentSketch = new p5(sketch, 'canvasContainer');
                 
                 // Minify and display code
                 minifyAndDisplay(code);
                 
                 showStatus('Sketch started successfully!');
-                
             } catch (error) {
                 console.error('Error running code:', error);
                 showStatus('Error: ' + error.message, 'error');
@@ -461,16 +455,13 @@ draw = () => {
             
             // Clear canvas container
             const container = document.getElementById('canvasContainer');
-            const canvases = container.querySelectorAll('canvas');
-            canvases.forEach(canvas => canvas.remove());
+            container.innerHTML = '';
             
-            // Show ready message
-            if (!container.querySelector('.loading')) {
-                const loading = document.createElement('div');
-                loading.className = 'loading';
-                loading.textContent = 'Ready to run your sketch...';
-                container.appendChild(loading);
-            }
+            // Add loading message
+            const loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.textContent = 'Ready to run your sketch...';
+            container.appendChild(loading);
         }
 
         // Minify code and display
@@ -579,7 +570,6 @@ draw = () => {
         // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', () => {
             initEditor();
-            
             // Auto-run code if it exists
             const savedCode = localStorage.getItem('tweetcode');
             if (savedCode && savedCode !== defaultCode) {
